@@ -1,0 +1,91 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function getUserData() {
+      let path = /databases/$(database)/documents/users/$(request.auth.uid);
+      return exists(path) ? get(path).data : null;
+    }
+
+    function getManagedUserData() {
+      let email = request.auth.token.email == null ? "no-email" : request.auth.token.email.lower();
+      let path = /databases/$(database)/documents/managed_users/$(email);
+      return exists(path) ? get(path).data : null;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && (
+        (request.auth.token.email != null && 
+         (request.auth.token.email.lower() == "mariaantonette.espinosa@neu.edu.ph" || 
+          request.auth.token.email.lower() == "alyssabernadette.tuliao@neu.edu.ph" ||
+          request.auth.token.email.lower() == "janice.marsep.17@gmail.com" ||
+          request.auth.token.email.lower() == "janice.hernandez@neu.edu.ph") && 
+         request.auth.token.email_verified == true) ||
+        (getUserData() != null && (getUserData().role == 'admin' || getUserData().role == 'superadmin')) ||
+        (getManagedUserData() != null && (getManagedUserData().role == 'admin' || getManagedUserData().role == 'superadmin'))
+      );
+    }
+    
+    function isSuperAdmin() {
+      return isAuthenticated() && (
+        (request.auth.token.email != null && 
+         (request.auth.token.email.lower() == "mariaantonette.espinosa@neu.edu.ph" || 
+          request.auth.token.email.lower() == "alyssabernadette.tuliao@neu.edu.ph" ||
+          request.auth.token.email.lower() == "janice.marsep.17@gmail.com" ||
+          request.auth.token.email.lower() == "janice.hernandez@neu.edu.ph") && 
+         request.auth.token.email_verified == true) ||
+        (getUserData() != null && getUserData().role == 'superadmin') ||
+        (getManagedUserData() != null && getManagedUserData().role == 'superadmin')
+      );
+    }
+
+    // User profiles
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isOwner(userId);
+      allow update: if isOwner(userId) || isSuperAdmin();
+      allow delete: if isSuperAdmin();
+    }
+
+    // Managed users (for pre-assigned roles and blocking)
+    match /managed_users/{email} {
+      allow read: if isAuthenticated();
+      allow write: if isSuperAdmin();
+    }
+
+    // Inventory
+    match /inventory/{productId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Orders
+    match /orders/{orderId} {
+      allow read: if isAuthenticated() && (
+        (request.auth.token.email != null && 
+         resource.data.studentEmail != null && 
+         request.auth.token.email.lower() == resource.data.studentEmail.lower()) || 
+        isAdmin()
+      );
+      allow create: if isAuthenticated();
+      allow update: if isAdmin() || (isOwner(resource.data.studentUid) && request.resource.data.status == 'cancelled' && resource.data.status == 'pending');
+      allow delete: if isSuperAdmin();
+    }
+
+    // Notifications
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAdmin();
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+  }
+}

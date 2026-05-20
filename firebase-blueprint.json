@@ -1,0 +1,91 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["superadmin", "admin", "student"] },
+        "blocked": { "type": "boolean" },
+        "picture": { "type": "string" }
+      },
+      "required": ["email", "role"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Uniform product information",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "category": { "type": "string", "enum": ["college", "highschool", "accessories"] },
+        "sizes": { "type": "object" },
+        "prices": { "type": "object" },
+        "imageUrl": { "type": "string" },
+        "hidden": { "type": "boolean" }
+      },
+      "required": ["name", "category", "sizes", "prices"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Student order request",
+      "type": "object",
+      "properties": {
+        "studentEmail": { "type": "string" },
+        "studentName": { "type": "string" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "productName": { "type": "string" },
+              "category": { "type": "string" },
+              "size": { "type": "string" },
+              "price": { "type": "number" },
+              "quantity": { "type": "number" }
+            }
+          }
+        },
+        "totalAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "approved", "ready", "completed", "cancelled"] },
+        "pickupDate": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["studentEmail", "items", "totalAmount", "status"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "User notification",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "read": { "type": "boolean" },
+        "type": { "type": "string", "enum": ["order_update", "system"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "message", "read", "type", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/inventory/{productId}": {
+      "schema": "Product",
+      "description": "Inventory items"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Order requests"
+    },
+    "/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "User notifications"
+    }
+  }
+}
