@@ -265,9 +265,10 @@ function App() {
   const [selectedNotification, setSelectedNotification] = useState<AppNotification | null>(null);
   
   const userNotifications = React.useMemo(() => {
-    if (!auth.currentUser) return [];
-    return notifications.filter(n => n.userId === auth.currentUser?.uid);
-  }, [notifications]);
+    if (!user) return [];
+    const currentUid = auth.currentUser?.uid || user.email.toLowerCase();
+    return notifications.filter(n => n.userId === currentUid);
+  }, [notifications, user]);
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => typeof window !== 'undefined' ? window.innerWidth < 1024 : true);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -441,6 +442,8 @@ function App() {
   // Auth Form State
   const [isLoading, setIsLoading] = useState(false);
 
+
+
   // Handle redirect result on mount (crucial for mobile browsers where popups are blocked)
   useEffect(() => {
     const checkRedirect = async () => {
@@ -571,12 +574,12 @@ function App() {
   
   // Load notifications
   useEffect(() => {
-    if (!user || !auth.currentUser?.uid) {
+    if (!user) {
       setNotifications([]);
       return;
     }
 
-    const currentUid = auth.currentUser.uid;
+    const currentUid = auth.currentUser?.uid || user.email.toLowerCase();
     const q = query(collection(db, 'notifications'), where('userId', '==', currentUid));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const notifs = snapshot.docs.map(doc => ({
@@ -718,7 +721,7 @@ function App() {
       await setDoc(doc(collection(db, 'orders')), {
         studentEmail: user.email.toLowerCase(),
         studentName: user.name,
-        studentUid: auth.currentUser?.uid,
+        studentUid: auth.currentUser?.uid || user.email.toLowerCase(),
         items: cart,
         totalAmount,
         status: 'pending',
@@ -847,22 +850,14 @@ function App() {
     setLoginError(null);
     setIsLoading(true);
     try {
-      const isMobile = typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      const isIframe = typeof window !== 'undefined' && window.self !== window.top;
-      
-      if (isMobile && !isIframe) {
-        // Use redirect on mobile for seamless experience (popup blockers bypass)
-        await signInWithRedirect(auth, googleProvider);
-      } else {
-        const result = await signInWithPopup(auth, googleProvider);
-        const email = result.user.email?.toLowerCase() || '';
-        const isAllowedEmail = email.endsWith(ALLOWED_DOMAIN) || email === "janice.marsep.17@gmail.com" || INITIAL_SUPERADMIN_EMAILS.includes(email);
-        if (!isAllowedEmail) {
-          await signOut(auth);
-          throw new Error(`Access Denied! Only ${ALLOWED_DOMAIN} emails are allowed.`);
-        }
-        showToast("Logged in with Google!");
+      const result = await signInWithPopup(auth, googleProvider);
+      const email = result.user.email?.toLowerCase() || '';
+      const isAllowedEmail = email.endsWith(ALLOWED_DOMAIN) || email === "janice.marsep.17@gmail.com" || INITIAL_SUPERADMIN_EMAILS.includes(email);
+      if (!isAllowedEmail) {
+        await signOut(auth);
+        throw new Error(`Access Denied! Only ${ALLOWED_DOMAIN} emails are allowed.`);
       }
+      showToast("Logged in with Google!");
     } catch (error: any) {
       if (error.code === 'auth/popup-blocked') {
         setLoginError("Popup was blocked by your browser. Please allow popups for this site.");
@@ -1383,9 +1378,9 @@ function App() {
                     </span>
                   </button>
 
-                  <div className="pt-2 text-center text-[11px] text-slate-400 font-medium">
+                  <div className="pt-2 text-center text-[11px] text-slate-400 font-medium font-sans">
                     <p>
-                      Please use your official university account (<span className="font-extrabold text-slate-600 font-sans">@neu.edu.ph</span>) to authenticate.
+                      Please use your official university account (<span className="font-extrabold text-slate-600">@neu.edu.ph</span>) to authenticate.
                     </p>
                   </div>
                 </div>
@@ -1397,10 +1392,10 @@ function App() {
               <motion.div 
                 initial={{ opacity: 0, y: 5 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="bg-red-50 border border-red-100 text-red-600 p-4 rounded-xl text-xs font-semibold flex items-start gap-3 shadow-sm"
+                className="bg-red-50 border border-red-100 text-red-600 p-4 rounded-xl text-xs font-semibold flex items-start gap-3 shadow-sm font-sans"
               >
                 <AlertCircle size={16} className="shrink-0 mt-0.5" />
-                <div className="space-y-0.5">
+                <div className="space-y-0.5 text-left">
                   <span className="font-bold block uppercase tracking-wide text-[10px]">Access Denied</span>
                   <span className="leading-relaxed font-medium">{loginError}</span>
                 </div>
