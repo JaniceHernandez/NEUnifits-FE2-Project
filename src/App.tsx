@@ -48,7 +48,9 @@ import {
   Settings2,
   Minus,
   LayoutGrid,
-  List
+  List,
+  Smartphone,
+  ExternalLink
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { motion, AnimatePresence } from 'motion/react';
@@ -81,6 +83,8 @@ import { cn } from './lib/utils';
 import { auth, db, googleProvider } from './firebase';
 import { 
   signInWithPopup, 
+  signInWithRedirect,
+  getRedirectResult,
   onAuthStateChanged, 
   signOut,
   updateProfile
@@ -209,6 +213,17 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [windowWidth, setWindowWidth] = useState(() => typeof window !== 'undefined' ? window.innerWidth : 1024);
+  const [isIframeMobile, setIsIframeMobile] = useState(false);
+  const [isTopLevelMobile, setIsTopLevelMobile] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && typeof navigator !== 'undefined') {
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      const isIframe = window.self !== window.top;
+      setIsIframeMobile(isMobile && isIframe);
+      setIsTopLevelMobile(isMobile && !isIframe);
+    }
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -426,6 +441,32 @@ function App() {
   // Auth Form State
   const [isLoading, setIsLoading] = useState(false);
 
+  // Handle redirect result on mount (crucial for mobile browsers where popups are blocked)
+  useEffect(() => {
+    const checkRedirect = async () => {
+      try {
+        setIsLoading(true);
+        const result = await getRedirectResult(auth);
+        if (result && result.user) {
+          const email = result.user.email?.toLowerCase() || '';
+          const isAllowedEmail = email.endsWith(ALLOWED_DOMAIN) || email === "janice.marsep.17@gmail.com" || INITIAL_SUPERADMIN_EMAILS.includes(email);
+          if (!isAllowedEmail) {
+            setLoginError(`Access Denied! Only ${ALLOWED_DOMAIN} emails are allowed.`);
+            await signOut(auth);
+          } else {
+            showToast("Successfully logged in!");
+          }
+        }
+      } catch (error: any) {
+        console.error("Redirect auth lookup error:", error);
+        setLoginError(error.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    checkRedirect();
+  }, []);
+
   // Auth State Listener
   useEffect(() => {
     async function testConnection() {
@@ -442,8 +483,16 @@ function App() {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         try {
+          const email = firebaseUser.email?.toLowerCase() || '';
+          const isAllowedEmail = email.endsWith(ALLOWED_DOMAIN) || email === "janice.marsep.17@gmail.com" || INITIAL_SUPERADMIN_EMAILS.includes(email);
+          if (!isAllowedEmail) {
+            setLoginError(`Access Denied! Only ${ALLOWED_DOMAIN} emails are allowed.`);
+            await signOut(auth);
+            setUser(null);
+            return;
+          }
           // Check managed_users first for roles/blocks
-          const managedDoc = await getDoc(doc(db, 'managed_users', firebaseUser.email?.toLowerCase() || ''));
+          const managedDoc = await getDoc(doc(db, 'managed_users', email));
           const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
           
           let role: User['role'] = 'student';
@@ -811,13 +860,22 @@ function App() {
     setLoginError(null);
     setIsLoading(true);
     try {
-      const result = await signInWithPopup(auth, googleProvider);
-      const email = result.user.email?.toLowerCase() || '';
-      if (!email.endsWith(ALLOWED_DOMAIN) && email !== "janice.marsep.17@gmail.com") {
-        await signOut(auth);
-        throw new Error(`Access Denied! Only ${ALLOWED_DOMAIN} emails are allowed.`);
+      const isMobile = typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      const isIframe = typeof window !== 'undefined' && window.self !== window.top;
+      
+      if (isMobile && !isIframe) {
+        // Use redirect on mobile for seamless experience (popup blockers bypass)
+        await signInWithRedirect(auth, googleProvider);
+      } else {
+        const result = await signInWithPopup(auth, googleProvider);
+        const email = result.user.email?.toLowerCase() || '';
+        const isAllowedEmail = email.endsWith(ALLOWED_DOMAIN) || email === "janice.marsep.17@gmail.com" || INITIAL_SUPERADMIN_EMAILS.includes(email);
+        if (!isAllowedEmail) {
+          await signOut(auth);
+          throw new Error(`Access Denied! Only ${ALLOWED_DOMAIN} emails are allowed.`);
+        }
+        showToast("Logged in with Google!");
       }
-      showToast("Logged in with Google!");
     } catch (error: any) {
       if (error.code === 'auth/operation-not-allowed') {
         setLoginError("Sign-in provider is not enabled in your Firebase Console. Please go to Authentication > Sign-in method and enable the provider.");
@@ -1306,20 +1364,44 @@ function App() {
 
             {/* Google Sign-in Section */}
             <div className="space-y-4">
-              <button
-                onClick={handleGoogleAuth}
-                disabled={isLoading}
-                className="w-full bg-brand-blue text-white font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-3 hover:bg-brand-blue-light hover:shadow-lg hover:shadow-brand-blue/10 focus:ring-4 focus:ring-brand-blue/10 transition-all duration-300 disabled:opacity-50 shadow-md shadow-brand-blue/10 active:scale-[0.98] cursor-pointer"
-              >
-                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5 bg-white p-0.5 rounded-full shrink-0" alt="Google" />
-                <span className="text-xs uppercase tracking-wider font-extrabold text-white">Sign in with Google</span>
-              </button>
+              {isIframeMobile ? (
+                <div className="bg-amber-50 border border-amber-200 text-amber-900 p-4 rounded-xl text-xs font-semibold space-y-3 shadow-xs font-sans">
+                  <div className="flex items-start gap-2.5">
+                    <Smartphone size={18} className="text-amber-600 shrink-0 mt-0.5 animate-bounce" />
+                    <div>
+                      <span className="font-black text-[10px] block uppercase tracking-wide text-amber-700">Mobile Iframe Detected</span>
+                      <p className="leading-relaxed font-semibold mt-0.5 text-amber-800">
+                        Google Sign-In is restricted inside native embeds / code iframes on mobile devices. Please open the system in a clean browser window to sign in successfully.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => window.open(window.location.href, '_blank')}
+                    className="w-full bg-brand-orange text-brand-blue font-black py-2.5 px-3 rounded-lg flex items-center justify-center gap-2 hover:bg-brand-orange/90 transition-all text-xs uppercase tracking-wider cursor-pointer shadow-sm"
+                  >
+                    <ExternalLink size={14} /> Open in New Tab
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <button
+                    onClick={handleGoogleAuth}
+                    disabled={isLoading}
+                    className="w-full bg-brand-blue text-white font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-3 hover:bg-brand-blue-light hover:shadow-lg hover:shadow-brand-blue/10 focus:ring-4 focus:ring-brand-blue/10 transition-all duration-300 disabled:opacity-50 shadow-md shadow-brand-blue/10 active:scale-[0.98] cursor-pointer"
+                  >
+                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5 bg-white p-0.5 rounded-full shrink-0" alt="Google" />
+                    <span className="text-xs uppercase tracking-wider font-extrabold text-white font-sans">
+                      {isTopLevelMobile ? "Sign in via Redirect" : "Sign in with Google"}
+                    </span>
+                  </button>
 
-              <div className="pt-2 text-center text-[11px] text-slate-400">
-                <p>
-                  Please use your official university account (<span className="font-extrabold text-slate-600">@neu.edu.ph</span>) to authenticate.
-                </p>
-              </div>
+                  <div className="pt-2 text-center text-[11px] text-slate-400">
+                    <p>
+                      Please use your official university account (<span className="font-extrabold text-slate-600">@neu.edu.ph</span>) to authenticate.
+                    </p>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Login Errors */}
