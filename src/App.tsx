@@ -445,7 +445,7 @@ function App() {
   useEffect(() => {
     const checkRedirect = async () => {
       try {
-        setIsLoading(true);
+        // Run getRedirectResult in the background without blocking screen loading or disabling sign-in buttons on mount
         const result = await getRedirectResult(auth);
         if (result && result.user) {
           const email = result.user.email?.toLowerCase() || '';
@@ -460,8 +460,6 @@ function App() {
       } catch (error: any) {
         console.error("Redirect auth lookup error:", error);
         setLoginError(error.message);
-      } finally {
-        setIsLoading(false);
       }
     };
     checkRedirect();
@@ -469,17 +467,6 @@ function App() {
 
   // Auth State Listener
   useEffect(() => {
-    async function testConnection() {
-      try {
-        await getDocsFromServer(query(collection(db, 'inventory'), where('category', '==', 'college')));
-      } catch (error) {
-        if(error instanceof Error && error.message.includes('the client is offline')) {
-          console.error("Please check your Firebase configuration. ");
-        }
-      }
-    }
-    testConnection();
-
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         try {
