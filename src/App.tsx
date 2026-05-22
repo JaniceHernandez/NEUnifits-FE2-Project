@@ -864,12 +864,13 @@ function App() {
         showToast("Logged in with Google!");
       }
     } catch (error: any) {
-      if (error.code === 'auth/operation-not-allowed') {
+      if (error.code === 'auth/popup-blocked') {
+        setLoginError("Popup was blocked by your browser. Please allow popups for this site.");
+      } else if (error.code === 'auth/operation-not-allowed') {
         setLoginError("Sign-in provider is not enabled in your Firebase Console. Please go to Authentication > Sign-in method and enable the provider.");
       } else {
         setLoginError(error.message);
       }
-    } finally {
       setIsLoading(false);
     }
   };
@@ -1370,24 +1371,24 @@ function App() {
                   </button>
                 </div>
               ) : (
-                <>
+                <div className="space-y-3 font-sans">
                   <button
                     onClick={handleGoogleAuth}
                     disabled={isLoading}
                     className="w-full bg-brand-blue text-white font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-3 hover:bg-brand-blue-light hover:shadow-lg hover:shadow-brand-blue/10 focus:ring-4 focus:ring-brand-blue/10 transition-all duration-300 disabled:opacity-50 shadow-md shadow-brand-blue/10 active:scale-[0.98] cursor-pointer"
                   >
                     <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5 bg-white p-0.5 rounded-full shrink-0" alt="Google" />
-                    <span className="text-xs uppercase tracking-wider font-extrabold text-white font-sans">
-                      {isTopLevelMobile ? "Sign in via Redirect" : "Sign in with Google"}
+                    <span className="text-xs uppercase tracking-wider font-extrabold text-white">
+                      Sign in with Google
                     </span>
                   </button>
 
-                  <div className="pt-2 text-center text-[11px] text-slate-400">
+                  <div className="pt-2 text-center text-[11px] text-slate-400 font-medium">
                     <p>
-                      Please use your official university account (<span className="font-extrabold text-slate-600">@neu.edu.ph</span>) to authenticate.
+                      Please use your official university account (<span className="font-extrabold text-slate-600 font-sans">@neu.edu.ph</span>) to authenticate.
                     </p>
                   </div>
-                </>
+                </div>
               )}
             </div>
 
@@ -2174,14 +2175,16 @@ function App() {
                           <div key={sUser.email} className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm hover:border-[#FF9D23]/40 transition-all flex flex-col justify-between gap-4 font-sans animate-fade-in">
                             <div className="flex items-start justify-between gap-3 min-w-0">
                               <div className="flex items-center gap-3 min-w-0">
-                                <div className="w-10 h-10 bg-slate-100 text-slate-600 rounded-xl flex items-center justify-center font-extrabold text-sm shrink-0">
-                                  {sUser.email.charAt(0).toUpperCase()}
+                                <div className="w-10 h-10 bg-slate-100 text-slate-600 rounded-xl flex items-center justify-center font-extrabold text-sm shrink-0 overflow-hidden">
+                                  {sUser.picture ? (
+                                    <img src={sUser.picture} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                  ) : (
+                                    (sUser.name || sUser.email).charAt(0).toUpperCase()
+                                  )}
                                 </div>
                                 <div className="flex flex-col min-w-0">
-                                  {sUser.displayName && (
-                                    <span className="font-extrabold text-slate-800 text-xs truncate" title={sUser.displayName}>{sUser.displayName}</span>
-                                  )}
-                                  <span className="text-[10px] text-slate-400 font-semibold truncate" title={sUser.email}>{sUser.email}</span>
+                                  <span className="font-bold text-slate-800 text-sm truncate" title={sUser.name}>{sUser.name}</span>
+                                  <span className="text-xs text-slate-500 truncate" title={sUser.email}>{sUser.email}</span>
                                 </div>
                               </div>
                             </div>
@@ -2189,7 +2192,7 @@ function App() {
                             <div className="border-t border-slate-100 pt-3 flex items-center justify-between">
                               <div className="flex items-center gap-1.5 shrink-0">
                                 <div className={cn("w-1.5 h-1.5 rounded-full", sUser.blocked ? "bg-red-500" : "bg-green-500")} />
-                                <span className={cn("text-[9px] font-black uppercase tracking-widest", sUser.blocked ? "text-red-500" : "text-green-500")}>
+                                <span className={cn("text-[10px] font-bold uppercase tracking-wider", sUser.blocked ? "text-red-500" : "text-green-500")}>
                                   {sUser.blocked ? 'Blocked' : 'Active'}
                                 </span>
                               </div>
