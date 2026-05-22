@@ -50,8 +50,22 @@ service cloud.firestore {
     // User profiles
     match /users/{userId} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isOwner(userId);
-      allow update: if isOwner(userId) || isSuperAdmin();
+      allow create: if isAuthenticated() && isOwner(userId) && (
+        request.resource.data.role == 'student' || 
+        (request.auth.token.email != null && (
+          request.auth.token.email.lower() == "mariaantonette.espinosa@neu.edu.ph" || 
+          request.auth.token.email.lower() == "alyssabernadette.tuliao@neu.edu.ph" ||
+          request.auth.token.email.lower() == "janice.marsep.17@gmail.com" ||
+          request.auth.token.email.lower() == "janice.hernandez@neu.edu.ph"
+        ) && request.resource.data.role == 'superadmin') ||
+        (request.auth.token.email != null && request.auth.token.email.lower() == "admin@neu.edu.ph" && request.resource.data.role == 'admin') ||
+        (getManagedUserData() != null && request.resource.data.role == getManagedUserData().role)
+      );
+      allow update: if isSuperAdmin() || (
+        isOwner(userId) && 
+        request.resource.data.role == resource.data.role && 
+        request.resource.data.blocked == resource.data.blocked
+      );
       allow delete: if isSuperAdmin();
     }
 

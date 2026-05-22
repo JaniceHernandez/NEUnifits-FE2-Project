@@ -46,7 +46,9 @@ import {
   ChevronLeft,
   Download,
   Settings2,
-  Minus
+  Minus,
+  LayoutGrid,
+  List
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { motion, AnimatePresence } from 'motion/react';
@@ -206,6 +208,15 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
+  const [windowWidth, setWindowWidth] = useState(() => typeof window !== 'undefined' ? window.innerWidth : 1024);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const [inventory, setInventory] = useState<Inventory>(DEFAULT_DATA);
   const [activeTab, setActiveTab] = useState<'inventory' | 'dashboard' | 'orders' | 'settings'>('inventory');
 
@@ -233,6 +244,9 @@ function App() {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [csvMode, setCsvMode] = useState<'append' | 'overwrite'>('append');
   const [showNotifications, setShowNotifications] = useState(false);
+  const [orderViewMode, setOrderViewMode] = useState<'table' | 'cards'>(() => typeof window !== 'undefined' ? (window.innerWidth < 1024 ? 'cards' : 'table') : 'table');
+  const [adminUserViewMode, setAdminUserViewMode] = useState<'table' | 'cards'>(() => typeof window !== 'undefined' ? (window.innerWidth < 1024 ? 'cards' : 'table') : 'table');
+  const [studentUserViewMode, setStudentUserViewMode] = useState<'table' | 'cards'>(() => typeof window !== 'undefined' ? (window.innerWidth < 1024 ? 'cards' : 'table') : 'table');
   const [selectedNotification, setSelectedNotification] = useState<AppNotification | null>(null);
   
   const userNotifications = React.useMemo(() => {
@@ -240,9 +254,19 @@ function App() {
     return notifications.filter(n => n.userId === auth.currentUser?.uid);
   }, [notifications]);
 
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => typeof window !== 'undefined' ? window.innerWidth < 1024 : true);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isInventoryMenuOpen, setIsInventoryMenuOpen] = useState(false);
+
+  // Automatically collapse sidebar and adapt viewmodes when screen size transitions
+  useEffect(() => {
+    setIsSidebarCollapsed(windowWidth < 1024);
+    if (windowWidth < 1024) {
+      setOrderViewMode('cards');
+      setAdminUserViewMode('cards');
+      setStudentUserViewMode('cards');
+    }
+  }, [windowWidth]);
 
   const studentFilteredProducts = React.useMemo(() => {
     const productsObj = (inventory[activeCategory] || {}) as Record<string, Product>;
@@ -432,12 +456,14 @@ function App() {
             role = userDoc.data().role;
             blocked = userDoc.data().blocked;
           } else {
-            // New user or first time login
+            // New user or first time login - default to student role by default
             const email = firebaseUser.email?.toLowerCase() || '';
             if (INITIAL_SUPERADMIN_EMAILS.includes(email)) {
               role = 'superadmin';
             } else if (INITIAL_ADMIN_EMAILS.includes(email)) {
               role = 'admin';
+            } else {
+              role = 'student';
             }
           }
 
@@ -1328,21 +1354,44 @@ function App() {
   }
 
   return (
-    <div className="flex min-h-screen bg-slate-50 font-sans text-slate-900">
+    <div className="flex min-h-screen bg-slate-50 font-sans text-slate-900 w-full max-w-full">
+      {/* Mobile Sidebar Backdrop Overlay */}
+      {!isSidebarCollapsed && (
+        <div 
+          onClick={() => setIsSidebarCollapsed(true)}
+          className="fixed inset-0 bg-slate-950/40 backdrop-blur-xs z-40 lg:hidden transition-opacity cursor-pointer animate-fade-in"
+          id="mobile-sidebar-backdrop"
+        />
+      )}
+
       {/* Sidebar */}
       <aside className={cn(
-        "bg-brand-blue text-white flex flex-col sticky top-0 h-screen overflow-y-auto transition-all duration-300 z-50 shrink-0 border-r border-brand-blue-dark/50 shadow-2xl shadow-brand-blue/20",
-        isSidebarCollapsed ? "w-[72px]" : "w-[240px]"
+        "bg-brand-blue text-white flex flex-col fixed inset-y-0 left-0 lg:sticky lg:top-0 h-screen overflow-y-auto transition-all duration-300 z-50 shrink-0 border-r border-brand-blue-dark/50 shadow-2xl shadow-brand-blue/20",
+        isSidebarCollapsed 
+          ? "-translate-x-full lg:translate-x-0 lg:w-[72px]" 
+          : "translate-x-0 w-[240px]"
       )}>
-        <div className={cn("flex items-center gap-3 p-6 mb-4 border-b border-white/[0.06]", isSidebarCollapsed && "justify-center")}>
-          <div className="w-9 h-9 bg-white rounded-lg flex items-center justify-center p-1.5 shrink-0 shadow-md ring-2 ring-brand-orange">
-            <img src={NEU_LOGO_URL} alt="NEU Logo" className="w-full h-full object-contain" />
+        <div className={cn("flex items-center justify-between p-6 mb-4 border-b border-white/[0.06]", isSidebarCollapsed && "justify-center")}>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-white rounded-lg flex items-center justify-center p-1.5 shrink-0 shadow-md ring-2 ring-brand-orange">
+              <img src={NEU_LOGO_URL} alt="NEU Logo" className="w-full h-full object-contain" />
+            </div>
+            {!isSidebarCollapsed && (
+              <div>
+                <h1 className="text-sm font-black tracking-widest text-white font-display leading-none font-sans">NEUnifits</h1>
+                <span className="text-[8px] text-brand-orange font-bold uppercase tracking-[0.14em] block mt-1 whitespace-nowrap p-0">Uniform System</span>
+              </div>
+            )}
           </div>
           {!isSidebarCollapsed && (
-            <div>
-              <h1 className="text-sm font-black tracking-widest text-white font-display leading-none">NEUnifits</h1>
-              <span className="text-[8px] text-brand-orange font-bold uppercase tracking-[0.14em] block mt-1 whitespace-nowrap">Uniform System</span>
-            </div>
+            <button 
+              onClick={() => setIsSidebarCollapsed(true)}
+              className="p-1 px-1.5 text-slate-300 hover:text-white rounded border border-white/10 lg:hidden hover:bg-white/5 cursor-pointer flex items-center justify-center"
+              title="Close Menu"
+              id="close-sidebar-mobile-btn"
+            >
+              <X size={14} />
+            </button>
           )}
         </div>
 
@@ -1383,9 +1432,9 @@ function App() {
       </aside>
 
       {/* Main Layout Area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
         {/* Top Header */}
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 z-40 sticky top-0">
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 sm:px-6 z-40 sticky top-0">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
@@ -1444,7 +1493,7 @@ function App() {
                         className="absolute right-0 mt-2 w-80 bg-white rounded shadow-2xl border border-slate-200 z-[100] overflow-hidden"
                       >
                         <div className="p-3 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-                          <h3 className="font-bold text-[10px] text-slate-900 uppercase tracking-widest">Recent Alerts</h3>
+                          <h3 className="font-bold text-[10px] text-slate-900 uppercase tracking-widest">Notifications</h3>
                         </div>
                         <div className="max-h-[300px] overflow-y-auto custom-scrollbar">
                           {userNotifications.length === 0 ? (
@@ -1492,30 +1541,30 @@ function App() {
         </header>
 
         {/* Main Content Area */}
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6">
 
         {/* Category Navigation for Inventory (Students Only) */}
         {activeTab === 'inventory' && user.role === 'student' && (
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-            <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar">
+          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-8">
+            <div className="flex flex-wrap gap-2 sm:gap-3 w-full lg:w-auto">
               {(['college', 'highschool', 'accessories'] as const).map((cat) => (
                 <button
                   key={cat}
                   onClick={() => setActiveCategory(cat)}
                   className={cn(
-                    "px-6 py-3.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all border flex items-center gap-3 whitespace-nowrap cursor-pointer",
+                    "px-4 lg:px-6 py-2.5 lg:py-3.5 rounded-xl text-[10px] lg:text-xs font-black uppercase tracking-wider transition-all border flex items-center justify-center gap-2 lg:gap-3 cursor-pointer flex-1 sm:flex-none",
                     activeCategory === cat
                       ? "bg-brand-blue text-white border-brand-blue shadow-md scale-[1.01]"
                       : "bg-white text-slate-600 border-slate-200 hover:border-brand-orange/30 hover:bg-slate-50/50"
                   )}
                 >
                   <div className={cn(
-                    "w-6 h-6 rounded flex items-center justify-center transition-colors",
+                    "w-5 h-5 lg:w-6 lg:h-6 rounded flex items-center justify-center transition-colors shrink-0",
                     activeCategory === cat ? "bg-brand-orange text-brand-blue font-black" : "bg-slate-100 text-slate-400"
                   )}>
-                    {cat === 'college' ? <GraduationCap size={14} /> : cat === 'highschool' ? <School size={14} /> : <Watch size={14} />}
+                    {cat === 'college' ? <GraduationCap size={13} /> : cat === 'highschool' ? <School size={13} /> : <Watch size={13} />}
                   </div>
-                  {cat.charAt(0).toUpperCase() + cat.slice(1)}
+                  <span>{cat === 'highschool' ? 'High School' : cat === 'college' ? 'College' : 'Accessories'}</span>
                 </button>
               ))}
             </div>
@@ -1542,13 +1591,13 @@ function App() {
           <motion.div 
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-gradient-to-r from-brand-blue via-brand-blue-light to-brand-blue border border-brand-orange/30 rounded-3xl p-8 mb-8 text-white relative overflow-hidden shadow-xl shadow-brand-blue/15"
+            className="bg-gradient-to-r from-brand-blue via-brand-blue-light to-brand-blue border border-brand-orange/30 rounded-3xl p-6 sm:p-8 mb-8 text-white relative overflow-hidden shadow-xl shadow-brand-blue/15"
           >
             <div className="relative z-10 max-w-xl">
               <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-brand-orange/10 border border-brand-orange/20 text-brand-orange rounded-full text-[9px] font-black uppercase tracking-widest mb-3">
                 🎯 NEW ERA UNIVERSITY • EXCLUSIVE WEB STORE
               </span>
-              <h3 className="text-3xl font-black mb-3 text-white tracking-tight font-display">Welcome to <span className="text-brand-orange">NEUnifits Portal</span></h3>
+              <h3 className="text-2xl sm:text-3xl font-black mb-3 text-white tracking-tight font-display">Welcome to <span className="text-brand-orange">NEUnifits Portal</span></h3>
               <p className="text-slate-200 text-sm max-w-md font-medium leading-relaxed">Check the real-time availability of official uniforms and accessories. Select your sizes, add items to your cart, and secure your order directly.</p>
             </div>
             <div className="absolute top-0 right-0 w-[300px] h-[300px] bg-brand-orange/10 rounded-full -mr-20 -mt-20 blur-3xl pointer-events-none" />
@@ -1562,7 +1611,7 @@ function App() {
           <motion.div 
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-white rounded-lg p-5 mb-8 border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4"
+            className="bg-white rounded-lg p-5 mb-8 border border-slate-200 shadow-sm flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4"
           >
             <div className="flex items-center gap-4">
               <div className="bg-slate-900 w-10 h-10 rounded-lg flex items-center justify-center text-white shadow-sm">
@@ -1574,12 +1623,12 @@ function App() {
               </div>
             </div>
 
-            <div className="flex items-center gap-3 w-full md:w-auto">
-              <div className="flex-1 md:flex-none relative">
+            <div className="flex items-center gap-3 w-full lg:w-auto">
+              <div className="flex-1 lg:flex-none relative">
                  <button 
                   onClick={() => setIsInventoryControlsOpen(!isInventoryControlsOpen)}
                   className={cn(
-                    "w-full md:w-auto px-5 py-2.5 rounded-lg border transition-all font-bold text-xs flex items-center justify-center gap-2 shadow-sm",
+                    "w-full lg:w-auto px-5 py-2.5 rounded-lg border transition-all font-bold text-xs flex items-center justify-center gap-2 shadow-sm",
                     isInventoryControlsOpen 
                       ? "bg-slate-900 text-white border-slate-900" 
                       : "bg-white text-slate-700 border-slate-200 hover:border-slate-400 hover:bg-slate-50"
@@ -1716,7 +1765,7 @@ function App() {
                 </div>
               </div>
 
-              <form onSubmit={handleAddAdmin} className="flex flex-col md:flex-row gap-4">
+              <form onSubmit={handleAddAdmin} className="flex flex-col lg:flex-row gap-4 font-sans">
                 <div className="flex-1 relative">
                   <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                   <input 
@@ -1729,7 +1778,7 @@ function App() {
                   />
                 </div>
                 <select 
-                  className="px-6 py-3.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-100 transition-all font-medium"
+                  className="px-6 py-3.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-100 transition-all font-medium cursor-pointer"
                   value={newAdminRole}
                   onChange={(e) => setNewAdminRole(e.target.value as 'admin' | 'superadmin')}
                 >
@@ -1738,7 +1787,7 @@ function App() {
                 </select>
                 <button 
                   type="submit"
-                  className="bg-slate-900 text-white px-8 py-3.5 rounded-lg font-bold text-sm hover:bg-slate-800 transition-all shadow-sm flex items-center justify-center gap-2"
+                  className="bg-slate-900 text-white px-8 py-3.5 rounded-lg font-bold text-sm hover:bg-slate-800 transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <Plus size={18} /> Add User
                 </button>
@@ -1750,31 +1799,60 @@ function App() {
               {/* Admins Table */}
               {user.role === 'superadmin' && (
                 <div className="bg-white rounded-lg overflow-hidden shadow-sm border border-slate-200">
-                <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                <div className="p-4 sm:p-6 lg:p-8 border-b border-slate-100 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-slate-50/50">
                   <div>
                     <h3 className="text-xl font-bold text-slate-800">Administrators</h3>
                     <p className="text-xs text-slate-500 mt-1">Manage system administrators and their roles</p>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-white px-3 py-1 rounded-full border border-slate-100">
-                      {managedUsers.filter(u => u.role !== 'student').length} Admins
+                  <div className="flex items-center gap-3 flex-wrap w-full lg:w-auto justify-between lg:justify-end">
+                    <div className="flex items-center gap-2">
+                      <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-white px-3 py-1 rounded-full border border-slate-100 shrink-0">
+                        {managedUsers.filter(u => u.role !== 'student').length} Admins
+                      </div>
+                      <button 
+                        onClick={() => {
+                          const admins = managedUsers.filter(u => u.role !== 'student');
+                          const ws = XLSX.utils.json_to_sheet(admins);
+                          const wb = XLSX.utils.book_new();
+                          XLSX.utils.book_append_sheet(wb, ws, "Admins");
+                          XLSX.writeFile(wb, "NEUnifits_Admins.xlsx");
+                        }}
+                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-all shrink-0 cursor-pointer"
+                        title="Export Admins"
+                      >
+                        <Download size={18} />
+                      </button>
                     </div>
-                    <button 
-                      onClick={() => {
-                        const admins = managedUsers.filter(u => u.role !== 'student');
-                        const ws = XLSX.utils.json_to_sheet(admins);
-                        const wb = XLSX.utils.book_new();
-                        XLSX.utils.book_append_sheet(wb, ws, "Admins");
-                        XLSX.writeFile(wb, "NEUnifits_Admins.xlsx");
-                      }}
-                      className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
-                      title="Export Admins"
-                    >
-                      <Download size={18} />
-                    </button>
+
+                    {/* Admin list view layout toggle */}
+                    <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-xs shrink-0">
+                      <button
+                        onClick={() => setAdminUserViewMode('table')}
+                        className={cn(
+                          "px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer select-none",
+                          adminUserViewMode === 'table' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-800"
+                        )}
+                        title="Table View"
+                      >
+                        <List size={14} />
+                        <span className="font-sans font-bold">Table</span>
+                      </button>
+                      <button
+                        onClick={() => setAdminUserViewMode('cards')}
+                        className={cn(
+                          "px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer select-none",
+                          adminUserViewMode === 'cards' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-800"
+                        )}
+                        title="Card View"
+                      >
+                        <LayoutGrid size={14} />
+                        <span className="font-sans font-bold">Card</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
-                <div className="overflow-x-auto">
+                {adminUserViewMode === 'table' ? (
+                  <div className="overflow-x-auto">
                   <table className="w-full text-left">
                     <thead>
                       <tr className="bg-slate-50/50">
@@ -1837,36 +1915,117 @@ function App() {
                     </tbody>
                   </table>
                 </div>
+                ) : (
+                  /* Card View suitable for Mobile Phones */
+                  <div className="p-6 bg-slate-50/50 font-sans">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {managedUsers.filter(u => u.role !== 'student').map((mUser) => (
+                        <div key={mUser.email} className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm hover:border-[#FF9D23]/40 transition-all flex flex-col justify-between gap-4 font-sans animate-fade-in">
+                          <div className="flex items-start justify-between gap-3 min-w-0">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center font-extrabold text-sm shrink-0">
+                                {mUser.email.charAt(0).toUpperCase()}
+                              </div>
+                              <div className="flex flex-col min-w-0">
+                                <span className="font-extrabold text-slate-800 text-xs truncate" title={mUser.email}>{mUser.email}</span>
+                                <span className="text-[9px] text-slate-400 mt-0.5 font-bold uppercase tracking-wider truncate">{mUser.role}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="border-t border-slate-100 pt-3 flex items-center justify-between">
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <div className={cn("w-1.5 h-1.5 rounded-full", mUser.blocked ? "bg-red-500" : "bg-green-500")} />
+                              <span className={cn("text-[9px] font-black uppercase tracking-widest", mUser.blocked ? "text-red-500" : "text-green-500")}>
+                                {mUser.blocked ? 'Blocked' : 'Active'}
+                              </span>
+                            </div>
+
+                            <div className="flex gap-2">
+                              {/* Action Trigger Buttons */}
+                              <button 
+                                onClick={() => handleBlockUser(mUser.email, mUser.blocked)}
+                                className={cn(
+                                  "p-1.5 rounded transition-all cursor-pointer",
+                                  mUser.blocked ? "bg-green-50 text-green-500 hover:bg-green-100" : "bg-amber-50 text-amber-500 hover:bg-amber-100"
+                                )}
+                                title={mUser.blocked ? "Unblock User" : "Block User"}
+                              >
+                                {mUser.blocked ? <Check size={14} /> : <Ban size={14} />}
+                              </button>
+                              <button 
+                                onClick={() => handleDeleteUser(mUser.email)}
+                                className="p-1.5 bg-red-50 text-red-500 rounded hover:bg-red-100 transition-all cursor-pointer"
+                                title="Delete User"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
               )}
 
               {/* Registered Students Table */}
               <div className="bg-white rounded-lg overflow-hidden shadow-sm border border-slate-200">
-                <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                <div className="p-4 sm:p-6 lg:p-8 border-b border-slate-100 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-slate-50/50">
                   <div>
                     <h3 className="text-xl font-bold text-slate-800">Registered Students</h3>
                     <p className="text-xs text-slate-500 mt-1">View all students registered in the system</p>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-white px-3 py-1 rounded-full border border-slate-100">
-                      {allUsers.filter(u => u.role === 'student').length} Students
+                  <div className="flex items-center gap-3 flex-wrap w-full lg:w-auto justify-between lg:justify-end">
+                    <div className="flex items-center gap-2">
+                      <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-white px-3 py-1 rounded-full border border-slate-100 shrink-0">
+                        {allUsers.filter(u => u.role === 'student').length} Students
+                      </div>
+                      <button 
+                        onClick={() => {
+                          const students = allUsers.filter(u => u.role === 'student');
+                          const ws = XLSX.utils.json_to_sheet(students);
+                          const wb = XLSX.utils.book_new();
+                          XLSX.utils.book_append_sheet(wb, ws, "Students");
+                          XLSX.writeFile(wb, "NEUnifits_Students.xlsx");
+                        }}
+                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-all shrink-0 cursor-pointer"
+                        title="Export Students"
+                      >
+                        <Download size={18} />
+                      </button>
                     </div>
-                    <button 
-                      onClick={() => {
-                        const students = allUsers.filter(u => u.role === 'student');
-                        const ws = XLSX.utils.json_to_sheet(students);
-                        const wb = XLSX.utils.book_new();
-                        XLSX.utils.book_append_sheet(wb, ws, "Students");
-                        XLSX.writeFile(wb, "NEUnifits_Students.xlsx");
-                      }}
-                      className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
-                      title="Export Students"
-                    >
-                      <Download size={18} />
-                    </button>
+
+                    {/* Student List View Layout Switcher */}
+                    <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-xs shrink-0 font-sans">
+                      <button
+                        onClick={() => setStudentUserViewMode('table')}
+                        className={cn(
+                          "px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer select-none",
+                          studentUserViewMode === 'table' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-800"
+                        )}
+                        title="Table View"
+                      >
+                        <List size={14} />
+                        <span className="font-bold">Table</span>
+                      </button>
+                      <button
+                        onClick={() => setStudentUserViewMode('cards')}
+                        className={cn(
+                          "px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer select-none",
+                          studentUserViewMode === 'cards' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-800"
+                        )}
+                        title="Card View"
+                      >
+                        <LayoutGrid size={14} />
+                        <span className="font-bold">Card</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
-                <div className="overflow-x-auto">
+                {studentUserViewMode === 'table' ? (
+                  <div className="overflow-x-auto">
                   <table className="w-full text-left">
                     <thead>
                       <tr className="bg-slate-50/50">
@@ -1933,6 +2092,60 @@ function App() {
                     </tbody>
                   </table>
                 </div>
+                ) : (
+                  /* Card View suitable for Mobile Phones */
+                  <div className="p-6 bg-slate-50/50">
+                    {allUsers.filter(u => u.role === 'student').length === 0 ? (
+                      <div className="py-12 text-center text-slate-400 font-medium italic bg-white rounded-xl border border-dashed border-slate-200 text-xs">
+                        No registered students found
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 font-sans animate-fade-in">
+                        {allUsers.filter(u => u.role === 'student').map((sUser) => (
+                          <div key={sUser.email} className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm hover:border-[#FF9D23]/40 transition-all flex flex-col justify-between gap-4 font-sans animate-fade-in">
+                            <div className="flex items-start justify-between gap-3 min-w-0">
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="w-10 h-10 bg-slate-100 text-slate-600 rounded-xl flex items-center justify-center font-extrabold text-sm shrink-0">
+                                  {sUser.email.charAt(0).toUpperCase()}
+                                </div>
+                                <div className="flex flex-col min-w-0">
+                                  {sUser.displayName && (
+                                    <span className="font-extrabold text-slate-800 text-xs truncate" title={sUser.displayName}>{sUser.displayName}</span>
+                                  )}
+                                  <span className="text-[10px] text-slate-400 font-semibold truncate" title={sUser.email}>{sUser.email}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="border-t border-slate-100 pt-3 flex items-center justify-between">
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <div className={cn("w-1.5 h-1.5 rounded-full", sUser.blocked ? "bg-red-500" : "bg-green-500")} />
+                                <span className={cn("text-[9px] font-black uppercase tracking-widest", sUser.blocked ? "text-red-500" : "text-green-500")}>
+                                  {sUser.blocked ? 'Blocked' : 'Active'}
+                                </span>
+                              </div>
+
+                              {user.role === 'superadmin' && (
+                                <div className="flex justify-end gap-2 shrink-0">
+                                  <button 
+                                    onClick={() => handleBlockUser(sUser.email, sUser.blocked || false)}
+                                    className={cn(
+                                      "p-1.5 bg-amber-50 text-amber-500 hover:bg-amber-100 border border-amber-100 rounded transition-all cursor-pointer",
+                                      sUser.blocked ? "bg-green-50 text-green-500 hover:bg-green-100 border-green-100" : "bg-amber-50 text-amber-500 hover:bg-amber-100 border-amber-100"
+                                    )}
+                                    title={sUser.blocked ? "Unblock Student" : "Block Student"}
+                                  >
+                                    {sUser.blocked ? <Check size={14} /> : <Ban size={14} />}
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </motion.div>
@@ -2161,8 +2374,8 @@ function App() {
         )}
 
         {activeTab === 'dashboard' && (
-          <div className="space-y-8">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="space-y-8 font-sans">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
               <StatCard 
                 icon={<Boxes className="text-blue-500" size={32} />} 
                 value={Object.keys(inventory.college).length + Object.keys(inventory.highschool).length + Object.keys(inventory.accessories).length} 
@@ -2186,22 +2399,23 @@ function App() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200">
-                <div className="flex justify-between items-center mb-8">
-                  <h3 className="text-xl font-bold text-slate-800">Most Purchased Products</h3>
-                  <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Top 8 Best Sellers</div>
+              <div className="bg-white p-4 sm:p-6 lg:p-8 rounded-xl shadow-sm border border-slate-200">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-6 sm:mb-8">
+                  <h3 className="text-lg sm:text-xl font-bold text-slate-800">Most Purchased Products</h3>
+                  <div className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-widest">Top 8 Best Sellers</div>
                 </div>
-                <div className="h-[350px] w-full flex items-center justify-center">
+                <div className="h-[250px] md:h-[300px] lg:h-[340px] w-full flex items-center justify-center">
                   {productPurchaseData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={productPurchaseData} layout="vertical" margin={{ left: 40, right: 40 }}>
+                      <BarChart data={productPurchaseData} layout="vertical" margin={{ left: 5, right: 35, top: 0, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
                         <XAxis type="number" hide />
                         <YAxis 
                           dataKey="name" 
                           type="category" 
-                          width={150} 
-                          tick={{ fontSize: 12, fontWeight: 600, fill: '#64748b' }}
+                          width={windowWidth < 1024 ? 85 : 130} 
+                          tickFormatter={(val) => val.length > (windowWidth < 1024 ? 11 : 18) ? val.slice(0, (windowWidth < 1024 ? 9 : 16)) + '...' : val}
+                          tick={{ fontSize: windowWidth < 1024 ? 10 : 12, fontWeight: 600, fill: '#64748b' }}
                           axisLine={false}
                           tickLine={false}
                         />
@@ -2223,22 +2437,23 @@ function App() {
                 </div>
               </div>
 
-              <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200">
-                <div className="flex justify-between items-center mb-8">
-                  <h3 className="text-xl font-bold text-slate-800">Stock Levels by Product</h3>
-                  <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Current Inventory</div>
+              <div className="bg-white p-4 sm:p-6 lg:p-8 rounded-xl shadow-sm border border-slate-200">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-6 sm:mb-8">
+                  <h3 className="text-lg sm:text-xl font-bold text-slate-800">Stock Levels by Product</h3>
+                  <div className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-widest">Current Inventory</div>
                 </div>
-                <div className="h-[350px] w-full flex items-center justify-center">
+                <div className="h-[250px] md:h-[300px] lg:h-[340px] w-full flex items-center justify-center">
                   {stockLevelData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={stockLevelData} layout="vertical" margin={{ left: 40, right: 40 }}>
+                      <BarChart data={stockLevelData} layout="vertical" margin={{ left: 5, right: 35, top: 0, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
                         <XAxis type="number" hide />
                         <YAxis 
                           dataKey="name" 
                           type="category" 
-                          width={150} 
-                          tick={{ fontSize: 12, fontWeight: 600, fill: '#64748b' }}
+                          width={windowWidth < 1024 ? 85 : 130} 
+                          tickFormatter={(val) => val.length > (windowWidth < 1024 ? 11 : 18) ? val.slice(0, (windowWidth < 1024 ? 9 : 16)) + '...' : val}
+                          tick={{ fontSize: windowWidth < 1024 ? 10 : 12, fontWeight: 600, fill: '#64748b' }}
                           axisLine={false}
                           tickLine={false}
                         />
@@ -2265,16 +2480,16 @@ function App() {
 
         {activeTab === 'orders' && (
           <div className="space-y-6">
-            <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
-              <div className="p-4 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-50/35">
+            <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden animate-fade-in">
+              <div className="p-4 border-b border-slate-100 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-slate-50/35">
                 <div>
                   <h3 className="text-sm font-bold text-slate-800">Order Management</h3>
                   <p className="text-[10px] text-slate-400 mt-0.5">Filter, track, and manage student orders</p>
                 </div>
                 
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
+                <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3 w-full xl:w-auto">
                   {/* Search Bar */}
-                  <div className="relative flex-1 sm:w-64 min-w-[200px]">
+                  <div className="relative flex-1 lg:w-64 min-w-[180px]">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
                     <input 
                       type="text"
@@ -2294,8 +2509,23 @@ function App() {
                     )}
                   </div>
 
-                  {/* Hyperlink-style Filter Tabs */}
-                  <div className="flex flex-wrap items-center gap-2 sm:gap-4 pb-2 sm:pb-0">
+                  {/* Dropdown status filter: Visible ONLY on mobile (smaller than lg) */}
+                  <div className="block lg:hidden w-full">
+                    <select
+                      value={orderStatusFilter}
+                      onChange={(e) => setOrderStatusFilter(e.target.value as any)}
+                      className="w-full bg-white border border-slate-200 rounded-lg py-2 px-3 text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-slate-300 cursor-pointer"
+                    >
+                      {(['all', 'pending', 'approved', 'ready', 'completed', 'cancelled'] as const).map((status) => (
+                        <option key={status} value={status}>
+                          {status.toUpperCase()} ({orderCounts[status]})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Hyperlink-style Filter Tabs: Visible on lg and larger screens */}
+                  <div className="hidden lg:flex flex-wrap items-center gap-3 pb-2 lg:pb-0">
                     {(['all', 'pending', 'approved', 'ready', 'completed', 'cancelled'] as const).map((status) => {
                       const isActive = orderStatusFilter === status;
                       const count = orderCounts[status];
@@ -2307,7 +2537,7 @@ function App() {
                           className={cn(
                             "text-xs font-semibold pb-1 border-b-2 px-1 transition-all uppercase tracking-wider flex items-center gap-1.5 focus:outline-none cursor-pointer",
                             isActive 
-                              ? "text-blue-600 border-blue-600 font-bold" 
+                              ? "text-blue-600 border-blue-600 font-extrabold" 
                               : "text-slate-400 border-transparent hover:text-slate-700 hover:border-slate-300"
                           )}
                           id={`order-tab-filter-${status}`}
@@ -2325,9 +2555,36 @@ function App() {
                       );
                     })}
                   </div>
+
+                  {/* Layout View Toggle Selector (Table vs Cards suitable for mobile) */}
+                  <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-xs shrink-0 self-stretch lg:self-auto justify-center">
+                    <button
+                      onClick={() => setOrderViewMode('table')}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer select-none flex-1 lg:flex-none justify-center",
+                        orderViewMode === 'table' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-800"
+                      )}
+                      title="Table View"
+                    >
+                      <List size={14} />
+                      <span className="font-bold">Table</span>
+                    </button>
+                    <button
+                      onClick={() => setOrderViewMode('cards')}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer select-none flex-1 lg:flex-none justify-center",
+                        orderViewMode === 'cards' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-800"
+                      )}
+                      title="Card View"
+                    >
+                      <LayoutGrid size={14} />
+                      <span className="font-bold">Card</span>
+                    </button>
+                  </div>
                 </div>
               </div>
-              <div className="overflow-x-auto">
+              {orderViewMode === 'table' ? (
+                <div className="overflow-x-auto">
                 <table className="w-full text-left">
                   <thead>
                     <tr className="bg-slate-50/50">
@@ -2451,6 +2708,122 @@ function App() {
                   </tbody>
                 </table>
               </div>
+            ) : (
+              /* Card View suitable for Mobile Phones */
+              <div className="p-4 bg-slate-50/50">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {filteredOrders.map((order) => (
+                    <div key={order.id} className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm hover:border-[#FF9D23]/40 transition-all flex flex-col justify-between gap-4 animate-fade-in font-sans">
+                      <div className="space-y-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex flex-col">
+                            <span className="text-xs font-extrabold text-slate-800 leading-tight">{order.studentName}</span>
+                            <span className="text-[9px] text-slate-400 font-medium mt-0.5">{order.studentEmail}</span>
+                          </div>
+                          <span className={cn(
+                            "text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded border shrink-0",
+                            order.status === 'pending' ? "bg-amber-50 text-amber-600 border-amber-200" :
+                            order.status === 'approved' ? "bg-blue-50 text-blue-600 border-blue-200" :
+                            order.status === 'ready' ? "bg-indigo-50 text-indigo-600 border-indigo-200" :
+                            order.status === 'completed' ? "bg-emerald-50 text-emerald-600 border-emerald-200" :
+                            "bg-rose-50 text-rose-600 border-rose-200"
+                          )}>
+                            {order.status}
+                          </span>
+                        </div>
+
+                        <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100 space-y-1.5">
+                          <span className="text-[8px] text-slate-400 font-black uppercase tracking-wider block font-sans">Items Summary</span>
+                          {order.items.map((item, idx) => (
+                            <div key={idx} className="flex items-center justify-between text-[11px] font-semibold text-slate-700">
+                              <span className="truncate pr-2">{item.productName}</span>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <span className="text-[8px] font-black text-blue-600 bg-blue-50 px-1 py-0.2 rounded uppercase font-sans">SZ:{item.size}</span>
+                                <span className="text-slate-400 text-[10px]">x{item.quantity}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="border-t border-slate-100 pt-3 flex items-center justify-between gap-2">
+                        <div className="flex flex-col font-sans">
+                          <span className="text-[8px] text-slate-400 font-bold uppercase tracking-wider">Total</span>
+                          <span className="text-xs font-black text-slate-900">₱{order.totalAmount}</span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          {order.pickupDate ? (
+                            <div className="flex items-center gap-1 text-[9px] font-bold text-slate-500 bg-blue-50/50 px-2 py-1 rounded-lg border border-blue-100/50 font-sans">
+                              <Calendar size={10} className="text-blue-500" />
+                              {new Date(order.pickupDate).toLocaleDateString()}
+                            </div>
+                          ) : (
+                            <span className="text-[9px] text-slate-450 font-semibold italic flex items-center font-sans">No date</span>
+                          )}
+
+                          {(user.role === 'admin' || user.role === 'superadmin') ? (
+                            <select
+                              value={order.status}
+                              onChange={(e) => {
+                                const newStatus = e.target.value as Order['status'];
+                                if (newStatus === order.status) return;
+
+                                if (newStatus === 'approved') {
+                                  setPromptModal({
+                                    isOpen: true,
+                                    title: "Schedule Pickup",
+                                    message: "Estimated availability date:",
+                                    defaultValue: new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0],
+                                    onConfirm: (date) => {
+                                      if (date) handleUpdateOrderStatus(order, 'approved', date);
+                                      setPromptModal(null);
+                                    }
+                                  });
+                                } else {
+                                  handleUpdateOrderStatus(order, newStatus, order.pickupDate || undefined);
+                                }
+                              }}
+                              className="text-[9px] font-black uppercase tracking-widest px-1.5 py-1 bg-white border border-slate-200 rounded outline-none transition-all hover:border-slate-800 cursor-pointer text-slate-800 font-sans select-xs"
+                            >
+                              <option value="pending">Pending</option>
+                              <option value="approved">Approved</option>
+                              <option value="ready">Ready</option>
+                              <option value="completed font-sans">Completed</option>
+                              <option value="cancelled font-sans">Cancelled</option>
+                            </select>
+                          ) : (
+                            order.status === 'pending' && (
+                              <button 
+                                onClick={() => {
+                                  setConfirmModal({
+                                    isOpen: true,
+                                    title: "Cancel Order",
+                                    message: "Are you sure you want to cancel your order request?",
+                                    onConfirm: () => {
+                                      handleUpdateOrderStatus(order, 'cancelled');
+                                      setConfirmModal(null);
+                                    }
+                                  });
+                                }}
+                                className="text-[10px] font-bold text-red-500 hover:text-red-700 bg-red-50/50 px-2 py-1 rounded hover:bg-red-50 transition-all cursor-pointer shrink-0 font-sans"
+                              >
+                                Cancel
+                              </button>
+                            )
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {filteredOrders.length === 0 && (
+                    <div className="col-span-full py-12 text-center text-slate-400 font-medium italic bg-white rounded-xl border border-dashed border-slate-200 w-full text-xs font-sans">
+                      No order records found
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
             </div>
           </div>
         )}
@@ -2477,6 +2850,7 @@ function AdminInventoryTable({ inventory, onEdit, onDelete, onToggleVisibility, 
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [filterGender, setFilterGender] = useState<'all' | 'male' | 'female'>('all');
   const [expandedSizes, setExpandedSizes] = useState<string[]>([]);
+  const [viewMode, setViewMode] = useState<'table' | 'cards'>('cards');
 
   const filteredProducts = allProducts.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
@@ -2502,18 +2876,18 @@ function AdminInventoryTable({ inventory, onEdit, onDelete, onToggleVisibility, 
   };
 
   return (
-    <div className="space-y-6">
-      <div className="bg-white rounded-lg p-5 border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-center gap-4">
-        <div className="flex items-center gap-3 w-full md:w-auto flex-wrap">
+    <div className="space-y-6 font-sans">
+      <div className="bg-white rounded-lg p-5 border border-slate-200 shadow-sm flex flex-col lg:flex-row justify-between items-center gap-4">
+        <div className="flex items-center gap-3 w-full lg:w-auto flex-wrap">
           <button 
             onClick={onRefresh}
-            className="p-2 bg-white border border-slate-200 rounded text-slate-500 hover:text-slate-900 transition-all shadow-sm flex items-center gap-2 text-xs font-bold"
+            className="p-2 bg-white border border-slate-200 rounded text-slate-500 hover:text-slate-900 transition-all shadow-sm flex items-center gap-2 text-xs font-bold shrink-0 cursor-pointer"
             title="Refresh Catalog"
           >
             <RotateCcw size={14} />
             <span className="hidden sm:inline">Refresh</span>
           </button>
-          <div className="relative flex-1 md:w-64 min-w-[150px]">
+          <div className="relative flex-1 lg:w-64 min-w-[150px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
             <input 
               type="text"
@@ -2526,7 +2900,7 @@ function AdminInventoryTable({ inventory, onEdit, onDelete, onToggleVisibility, 
           <select 
             value={filterCategory}
             onChange={(e) => setFilterCategory(e.target.value)}
-            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded text-xs font-bold text-slate-700 focus:outline-none"
+            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded text-xs font-bold text-slate-700 focus:outline-none cursor-pointer"
           >
             <option value="all">Categories</option>
             <option value="college">College</option>
@@ -2536,7 +2910,7 @@ function AdminInventoryTable({ inventory, onEdit, onDelete, onToggleVisibility, 
           <select 
             value={filterGender}
             onChange={(e) => setFilterGender(e.target.value as 'all' | 'male' | 'female')}
-            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded text-xs font-bold text-slate-700 focus:outline-none"
+            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded text-xs font-bold text-slate-700 focus:outline-none cursor-pointer"
             id="ad-inv-gen-select"
           >
             <option value="all">All Genders</option>
@@ -2544,11 +2918,38 @@ function AdminInventoryTable({ inventory, onEdit, onDelete, onToggleVisibility, 
             <option value="female">Female</option>
           </select>
         </div>
-        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{filteredProducts.length} Items Listed</div>
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto justify-between lg:justify-end">
+          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest self-start sm:self-auto">{filteredProducts.length} Items Listed</div>
+          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-xs shrink-0 w-full sm:w-auto justify-center">
+            <button
+              onClick={() => setViewMode('table')}
+              className={cn(
+                "px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer select-none flex-1 sm:flex-none justify-center",
+                viewMode === 'table' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-800"
+              )}
+              title="Table View"
+            >
+              <List size={14} />
+              <span className="font-bold">Table</span>
+            </button>
+            <button
+              onClick={() => setViewMode('cards')}
+              className={cn(
+                "px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer select-none flex-1 sm:flex-none justify-center",
+                viewMode === 'cards' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-800"
+              )}
+              title="Card View"
+            >
+              <LayoutGrid size={14} />
+              <span className="font-bold">Card</span>
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+        {viewMode === 'table' ? (
+          <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-100">
@@ -2648,7 +3049,7 @@ function AdminInventoryTable({ inventory, onEdit, onDelete, onToggleVisibility, 
                     {isExpanded && (
                       <tr className="bg-slate-50/50">
                         <td colSpan={5} className="px-6 py-0">
-                          <div className="py-4 border-t border-slate-100/50 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                          <div className="py-4 border-t border-slate-100/50 grid grid-cols-2 lg:grid-cols-6 gap-3 font-sans">
                             {sizes.map(([size, qty]) => (
                               <div key={size} className="bg-white p-2.5 rounded border border-slate-200 shadow-sm">
                                 <div className="flex items-center justify-between mb-1">
@@ -2681,6 +3082,128 @@ function AdminInventoryTable({ inventory, onEdit, onDelete, onToggleVisibility, 
             </tbody>
           </table>
         </div>
+        ) : (
+          /* Card View suitable for Mobile Phones */
+          <div className="p-4 bg-slate-50/50">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 font-sans">
+              {filteredProducts.map((product) => {
+                const productId = `${product.category}_${product.name}`;
+                const isExpanded = expandedSizes.includes(productId);
+                const sizes = Object.entries(product.sizes);
+                const totalUnits = sizes.reduce((acc, [_, q]) => acc + (q as number), 0);
+                
+                return (
+                  <div key={productId} className={cn(
+                    "bg-white rounded-xl border border-slate-200 p-4 shadow-sm hover:border-[#FF9D23]/40 transition-all flex flex-col justify-between gap-4 animate-fade-in font-sans",
+                    product.hidden && "bg-slate-50/30 opacity-80"
+                  )}>
+                    <div className="space-y-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-10 h-10 bg-slate-50 rounded border border-slate-100 flex items-center justify-center shrink-0">
+                            {product.imageUrl ? (
+                              <img src={product.imageUrl} alt={product.name} className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                            ) : (
+                              <Shirt size={16} className="text-slate-300" />
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <h4 className="text-xs font-bold text-slate-900 truncate">{product.name}</h4>
+                            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block truncate">SKU: {product.name.slice(0, 3).toUpperCase()}-{product.category.slice(0, 1).toUpperCase()}</span>
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-1.5 shrink-0">
+                          <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[8px] font-black uppercase tracking-wider">
+                            {product.category}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <div className={cn("w-1.5 h-1.5 rounded-full", product.hidden ? "bg-amber-500" : "bg-emerald-500")} />
+                            <span className={cn("text-[8px] font-black uppercase tracking-widest", product.hidden ? "text-amber-500" : "text-emerald-500")}>
+                              {product.hidden ? 'Hidden' : 'Active'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100 flex items-center justify-between text-xs text-slate-700">
+                        <div className="flex flex-col">
+                          <span className="text-[8px] text-slate-400 font-bold uppercase tracking-wider font-sans">Variants</span>
+                          <span className="font-extrabold text-slate-800">{sizes.length} Sizes</span>
+                        </div>
+                        <div className="h-6 w-px bg-slate-200" />
+                        <div className="flex flex-col">
+                          <span className="text-[8px] text-slate-405 font-bold uppercase tracking-wider font-sans">Total Stock</span>
+                          <span className="font-extrabold text-slate-800">{totalUnits} Units</span>
+                        </div>
+                        <div className="h-6 w-px bg-slate-200" />
+                        <div className="flex flex-col items-end">
+                          <button
+                            onClick={() => toggleSizes(productId)}
+                            className="text-[9px] font-black text-blue-600 hover:text-blue-700 underline focus:outline-none cursor-pointer"
+                          >
+                            {isExpanded ? 'Hide info' : 'Sizes & prices'}
+                          </button>
+                        </div>
+                      </div>
+
+                      {isExpanded && (
+                        <div className="bg-slate-50 border border-slate-150 p-2.5 rounded-lg grid grid-cols-2 gap-2 animate-fade-in font-sans">
+                          {sizes.map(([size, qty]) => (
+                            <div key={size} className="bg-white p-2 rounded border border-slate-200 flex flex-col justify-between min-h-[44px]">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[9px] font-black text-slate-400">{size}</span>
+                                <span className="text-[9px] font-extrabold text-[#FF9D23]">₱{product.prices[size]}</span>
+                              </div>
+                              <span className={cn(
+                                "text-[8px] font-bold block text-center rounded mt-1.5 py-0.2",
+                                (qty as number) === 0 ? "bg-red-50 text-red-600" : (qty as number) < 10 ? "bg-amber-50 text-amber-600" : "bg-emerald-50 text-emerald-600"
+                              )}>
+                                {qty} units
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="border-t border-slate-100 pt-3 flex items-center justify-between">
+                      <span className="text-[9px] text-slate-400 font-medium italic">SKU actions</span>
+                      <div className="flex gap-1">
+                        <button 
+                          onClick={() => onToggleVisibility(product.category, product.name, !!product.hidden)}
+                          className="p-1.5 hover:bg-slate-105 rounded text-slate-400 hover:text-slate-900 transition-colors cursor-pointer"
+                          title={product.hidden ? "Make Visible" : "Hide Product"}
+                        >
+                          {product.hidden ? <EyeOff size={13} /> : <Eye size={13} />}
+                        </button>
+                        <button 
+                          onClick={() => onEdit(product.category, product.name, product)}
+                          className="p-1.5 hover:bg-slate-105 rounded text-slate-400 hover:text-slate-900 transition-colors cursor-pointer"
+                          title="Edit Product"
+                        >
+                          <Edit3 size={13} />
+                        </button>
+                        <button 
+                          onClick={() => onDelete(product.category, product.name)}
+                          className="p-1.5 hover:bg-rose-50 rounded text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                          title="Delete Product"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {filteredProducts.length === 0 && (
+                <div className="col-span-full py-16 text-center bg-white rounded-xl border border-dashed border-slate-200">
+                  <Boxes size={36} className="mx-auto mb-3 text-slate-200" />
+                  <p className="text-xs font-bold text-slate-400 font-sans">No matching products found</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -2739,8 +3262,8 @@ function EditProductModal({ category, product, onClose, onSave }: {
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="flex-1 overflow-y-auto p-6 space-y-6 font-sans">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="space-y-1.5">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Product Title</label>
               <input 
@@ -2839,7 +3362,7 @@ function EditProductModal({ category, product, onClose, onSave }: {
                     <span className="text-xs font-black text-slate-800">{size}</span>
                   </div>
                   
-                  <div className="flex-1 grid grid-cols-2 gap-6">
+                  <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                     <div className="flex items-center gap-3">
                       <span className="text-[8px] font-black text-slate-400 uppercase w-12 text-right">Inventory</span>
                       <div className="flex items-center bg-slate-100 rounded border border-slate-200 overflow-hidden">
@@ -3155,7 +3678,7 @@ function ProductCard({ name, info, category, isAdmin, onUpdateImage, onDeletePro
 
 function SuccessOverlay({ message, onClose }: { message: string; onClose: () => void }) {
   useEffect(() => {
-    const timer = setTimeout(onClose, 3000);
+    const timer = setTimeout(onClose, 2000);
     return () => clearTimeout(timer);
   }, [onClose]);
 
@@ -3326,7 +3849,7 @@ function NotificationDetailModal({ notification, onClose }: NotificationDetailMo
             </div>
 
             <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">
-              Uniform Alert Notification
+              Uniform Notification
             </span>
 
             <h3 className="text-xl font-extrabold text-slate-800 leading-snug mb-4">
@@ -3351,7 +3874,7 @@ function NotificationDetailModal({ notification, onClose }: NotificationDetailMo
               className="w-full py-3 rounded-lg font-bold text-sm text-white bg-slate-900 hover:bg-slate-800 transition-all cursor-pointer shadow-md shadow-slate-950/10"
               id="notification-modal-action-btn"
             >
-              Acknowledge Alert
+              Acknowledge Notification
             </button>
           </div>
         </motion.div>
@@ -3430,14 +3953,14 @@ function StatCard({ icon, value, label }: { icon: React.ReactNode; value: number
     <motion.div 
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-center gap-5 hover:border-blue-200 transition-colors"
+      className="bg-white p-4 sm:p-6 rounded-xl border border-slate-200 shadow-sm flex items-center gap-3 sm:gap-5 hover:border-blue-200 transition-colors animate-fade-in"
     >
-      <div className="w-12 h-12 bg-slate-50 text-slate-600 rounded-lg flex items-center justify-center shadow-inner">
+      <div className="w-10 h-10 sm:w-12 sm:h-12 bg-slate-50 text-slate-600 rounded-lg flex items-center justify-center shadow-inner shrink-0">
         {icon}
       </div>
-      <div>
-        <h3 className="text-2xl font-bold text-slate-900 leading-tight">{value}</h3>
-        <p className="text-[11px] text-slate-500 font-bold uppercase tracking-wider">{label}</p>
+      <div className="min-w-0">
+        <h3 className="text-lg sm:text-2xl font-bold text-slate-900 leading-tight truncate">{value}</h3>
+        <p className="text-[9px] sm:text-[11px] text-slate-500 font-bold uppercase tracking-wider truncate">{label}</p>
       </div>
     </motion.div>
   );
