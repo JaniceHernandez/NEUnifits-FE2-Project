@@ -1,5 +1,6 @@
 {
   "name": "NEUnifits",
-  "description": "School uniform inventory management system for NEU students and admins.",
-  "requestFramePermissions": []
+  "description": "School uniform inventory management and online ordering system for New Era University students and staff.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

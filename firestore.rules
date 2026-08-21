@@ -7,64 +7,54 @@ service cloud.firestore {
     }
     
     function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
-    }
-    
-    function getUserData() {
-      let path = /databases/$(database)/documents/users/$(request.auth.uid);
-      return exists(path) ? get(path).data : null;
+      return isAuthenticated() && (
+        request.auth.uid == userId || 
+        (request.auth.token.email != null && request.auth.token.email == userId)
+      );
     }
 
-    function getManagedUserData() {
-      let email = request.auth.token.email == null ? "no-email" : request.auth.token.email.lower();
-      let path = /databases/$(database)/documents/managed_users/$(email);
-      return exists(path) ? get(path).data : null;
+    function isInitialAdmin() {
+      return isAuthenticated() && request.auth.token.email != null && (
+        request.auth.token.email == "mariaantonette.espinosa@neu.edu.ph" || 
+        request.auth.token.email == "alyssabernadette.tuliao@neu.edu.ph" ||
+        request.auth.token.email == "janice.marsep.17@gmail.com" || 
+        request.auth.token.email == "janice.hernandez@neu.edu.ph" ||
+        request.auth.token.email == "admin@neu.edu.ph" ||
+        request.auth.token.email.matches(".*admin.*")
+      );
+    }
+
+    function hasAdminRole() {
+      return (request.auth.token.email != null && exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && (get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == 'admin' || get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == 'superadmin')) ||
+             (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'superadmin')) ||
+             (request.auth.token.email != null && exists(/databases/$(database)/documents/managed_users/$(request.auth.token.email)) && (get(/databases/$(database)/documents/managed_users/$(request.auth.token.email)).data.role == 'admin' || get(/databases/$(database)/documents/managed_users/$(request.auth.token.email)).data.role == 'superadmin'));
+    }
+    
+    function hasSuperAdminRole() {
+      return (request.auth.token.email != null && exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == 'superadmin') ||
+             (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'superadmin') ||
+             (request.auth.token.email != null && exists(/databases/$(database)/documents/managed_users/$(request.auth.token.email)) && get(/databases/$(database)/documents/managed_users/$(request.auth.token.email)).data.role == 'superadmin');
     }
     
     function isAdmin() {
-      return isAuthenticated() && (
-        (request.auth.token.email != null && 
-         (request.auth.token.email.lower() == "mariaantonette.espinosa@neu.edu.ph" || 
-          request.auth.token.email.lower() == "alyssabernadette.tuliao@neu.edu.ph" ||
-          request.auth.token.email.lower() == "janice.marsep.17@gmail.com" ||
-          request.auth.token.email.lower() == "janice.hernandez@neu.edu.ph") && 
-         request.auth.token.email_verified == true) ||
-        (getUserData() != null && (getUserData().role == 'admin' || getUserData().role == 'superadmin')) ||
-        (getManagedUserData() != null && (getManagedUserData().role == 'admin' || getManagedUserData().role == 'superadmin'))
-      );
+      return isAuthenticated() && (isInitialAdmin() || hasAdminRole());
     }
     
     function isSuperAdmin() {
-      return isAuthenticated() && (
-        (request.auth.token.email != null && 
-         (request.auth.token.email.lower() == "mariaantonette.espinosa@neu.edu.ph" || 
-          request.auth.token.email.lower() == "alyssabernadette.tuliao@neu.edu.ph" ||
-          request.auth.token.email.lower() == "janice.marsep.17@gmail.com" ||
-          request.auth.token.email.lower() == "janice.hernandez@neu.edu.ph") && 
-         request.auth.token.email_verified == true) ||
-        (getUserData() != null && getUserData().role == 'superadmin') ||
-        (getManagedUserData() != null && getManagedUserData().role == 'superadmin')
-      );
+      return isAuthenticated() && (isInitialAdmin() || hasSuperAdminRole());
     }
 
     // User profiles
     match /users/{userId} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isOwner(userId) && (
-        request.resource.data.role == 'student' || 
-        (request.auth.token.email != null && (
-          request.auth.token.email.lower() == "mariaantonette.espinosa@neu.edu.ph" || 
-          request.auth.token.email.lower() == "alyssabernadette.tuliao@neu.edu.ph" ||
-          request.auth.token.email.lower() == "janice.marsep.17@gmail.com" ||
-          request.auth.token.email.lower() == "janice.hernandez@neu.edu.ph"
-        ) && request.resource.data.role == 'superadmin') ||
-        (request.auth.token.email != null && request.auth.token.email.lower() == "admin@neu.edu.ph" && request.resource.data.role == 'admin') ||
-        (getManagedUserData() != null && request.resource.data.role == getManagedUserData().role)
+      allow create: if isAuthenticated() && (
+        isOwner(userId) || 
+        isAdmin()
       );
-      allow update: if isSuperAdmin() || (
-        isOwner(userId) && 
-        request.resource.data.role == resource.data.role && 
-        request.resource.data.blocked == resource.data.blocked
+      allow update: if isAuthenticated() && (
+        isSuperAdmin() || 
+        isAdmin() || 
+        (isOwner(userId) && request.resource.data.role == resource.data.role && request.resource.data.blocked == resource.data.blocked)
       );
       allow delete: if isSuperAdmin();
     }
@@ -72,34 +62,54 @@ service cloud.firestore {
     // Managed users (for pre-assigned roles and blocking)
     match /managed_users/{email} {
       allow read: if isAuthenticated();
-      allow write: if isSuperAdmin();
+      allow write: if isAdmin();
     }
 
     // Inventory
     match /inventory/{productId} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow write: if isAdmin();
     }
 
     // Orders
     match /orders/{orderId} {
       allow read: if isAuthenticated() && (
-        (request.auth.token.email != null && 
-         resource.data.studentEmail != null && 
-         request.auth.token.email.lower() == resource.data.studentEmail.lower()) || 
-        isAdmin()
+        isAdmin() ||
+        resource.data.studentEmail == request.auth.token.email ||
+        resource.data.studentUid == request.auth.uid
       );
       allow create: if isAuthenticated();
-      allow update: if isAdmin() || (isOwner(resource.data.studentUid) && request.resource.data.status == 'cancelled' && resource.data.status == 'pending');
+      allow update: if isAdmin() || (
+        isAuthenticated() && 
+        (resource.data.studentUid == request.auth.uid || (resource.data.studentEmail != null && request.auth.token.email != null && resource.data.studentEmail == request.auth.token.email)) && 
+        request.resource.data.status == 'cancelled' && 
+        resource.data.status == 'pending'
+      );
       allow delete: if isSuperAdmin();
     }
 
     // Notifications
     match /notifications/{notificationId} {
-      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
-      allow create: if isAdmin();
-      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
-      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow read: if isAuthenticated() && (
+        isAdmin() ||
+        resource.data.userEmail == request.auth.token.email ||
+        resource.data.userId == request.auth.uid
+      );
+      allow create: if isAuthenticated() && (
+        isAdmin() ||
+        request.resource.data.userEmail == request.auth.token.email ||
+        request.resource.data.userId == request.auth.uid
+      );
+      allow update: if isAuthenticated() && (
+        isAdmin() ||
+        resource.data.userEmail == request.auth.token.email ||
+        resource.data.userId == request.auth.uid
+      ) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      allow delete: if isAuthenticated() && (
+        isAdmin() ||
+        resource.data.userEmail == request.auth.token.email ||
+        resource.data.userId == request.auth.uid
+      );
     }
   }
 }

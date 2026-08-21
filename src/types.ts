@@ -22,11 +22,15 @@ export interface Inventory {
 }
 
 export interface User {
-  name: string;
+  uid?: string;
+  name?: string;
+  displayName?: string;
   email: string;
-  picture: string;
+  picture?: string;
+  photoURL?: string;
   role: 'superadmin' | 'admin' | 'student';
   blocked?: boolean;
+  createdAt?: string;
 }
 
 export const DEFAULT_DATA: Inventory = {
