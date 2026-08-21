@@ -54,6 +54,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { motion, AnimatePresence } from 'motion/react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   BarChart, 
   Bar, 
@@ -235,16 +236,54 @@ function App() {
   const [inventory, setInventory] = useState<Inventory>(DEFAULT_DATA);
   const [activeTab, setActiveTab] = useState<'inventory' | 'dashboard' | 'orders' | 'settings'>('inventory');
 
-  // Set initial tab based on role when user logs in
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Synchronize URL paths with active tab and page title
   useEffect(() => {
-    if (user) {
-      if (user.role === 'superadmin' || user.role === 'admin') {
-        setActiveTab('dashboard');
+    const path = location.pathname.toLowerCase();
+    if (path.startsWith('/dashboard')) {
+      if (user && user.role === 'student') {
+        navigate('/shop', { replace: true });
       } else {
-        setActiveTab('inventory');
+        setActiveTab('dashboard');
+        document.title = 'NEUnifits | Analytics Dashboard';
+      }
+    } else if (path.startsWith('/shop') || path.startsWith('/catalog') || path.startsWith('/inventory')) {
+      setActiveTab('inventory');
+      document.title = user?.role === 'student' ? 'NEUnifits | Uniform Shop' : 'NEUnifits | Inventory Management';
+    } else if (path.startsWith('/orders')) {
+      setActiveTab('orders');
+      document.title = 'NEUnifits | Orders & Tracking';
+    } else if (path.startsWith('/settings') || path.startsWith('/users') || path.startsWith('/admin')) {
+      if (user && user.role === 'student') {
+        navigate('/shop', { replace: true });
+      } else {
+        setActiveTab('settings');
+        document.title = 'NEUnifits | User & Access Management';
+      }
+    } else if (path === '/' || path === '/login') {
+      if (user) {
+        const defaultPath = user.role === 'student' ? '/shop' : '/dashboard';
+        navigate(defaultPath, { replace: true });
+      } else {
+        document.title = 'NEUnifits | School Uniform Portal';
       }
     }
-  }, [user]);
+  }, [location.pathname, user, navigate]);
+
+  const handleTabChange = (tab: 'inventory' | 'dashboard' | 'orders' | 'settings') => {
+    setActiveTab(tab);
+    if (tab === 'dashboard') {
+      navigate('/dashboard');
+    } else if (tab === 'inventory') {
+      navigate(user?.role === 'student' ? '/shop' : '/inventory');
+    } else if (tab === 'orders') {
+      navigate('/orders');
+    } else if (tab === 'settings') {
+      navigate('/settings');
+    }
+  };
   const [toast, setToast] = useState<{ message: string; isError: boolean } | null>(null);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<keyof Inventory>('college');
@@ -902,6 +941,7 @@ function App() {
   const handleLogout = async () => {
     await signOut(auth);
     setActiveTab('inventory');
+    navigate('/login');
     showToast("Logged out successfully");
   };
 
@@ -1466,7 +1506,7 @@ function App() {
               icon={<LayoutDashboard size={18} />} 
               label="Dashboard" 
               active={activeTab === 'dashboard'} 
-              onClick={() => setActiveTab('dashboard')}
+              onClick={() => handleTabChange('dashboard')}
               isCollapsed={isSidebarCollapsed}
             />
           )}
@@ -1474,14 +1514,14 @@ function App() {
             icon={<Boxes size={18} />} 
             label={user.role === 'student' ? "Shop" : "Inventory"} 
             active={activeTab === 'inventory'} 
-            onClick={() => setActiveTab('inventory')}
+            onClick={() => handleTabChange('inventory')}
             isCollapsed={isSidebarCollapsed}
           />
           <SidebarNavItem 
             icon={<ShoppingCart size={18} />} 
             label="Orders" 
             active={activeTab === 'orders'} 
-            onClick={() => setActiveTab('orders')}
+            onClick={() => handleTabChange('orders')}
             isCollapsed={isSidebarCollapsed}
           />
           {(user.role === 'superadmin' || user.role === 'admin') && (
@@ -1489,7 +1529,7 @@ function App() {
               icon={<Settings size={18} />} 
               label="Settings" 
               active={activeTab === 'settings'} 
-              onClick={() => setActiveTab('settings')}
+              onClick={() => handleTabChange('settings')}
               isCollapsed={isSidebarCollapsed}
             />
           )}
